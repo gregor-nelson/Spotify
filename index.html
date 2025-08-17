@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Personal Discover — MVP (No Restricted Endpoints)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <meta name="color-scheme" content="dark light" />
+  <style>
+    :root { color-scheme: dark light; }
+    *:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+    ::-webkit-scrollbar { height: 8px; width: 8px; }
+    ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 999px; }
+    
+    /* Mobile Carousel Styles */
+    @media (max-width: 768px) {
+      .discovery-carousel {
+        scroll-snap-type: x mandatory;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      
+      .discovery-carousel::-webkit-scrollbar {
+        display: none;
+      }
+      
+      .discovery-card {
+        scroll-snap-align: start;
+        min-width: 100%;
+      }
+      
+      .discovery-card.active {
+        border-color: #10b981;
+      }
+      
+      .indicator-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #3f3f46;
+        cursor: pointer;
+        transition: background-color 0.2s;
+      }
+      
+      .indicator-dot.active {
+        background: #10b981;
+      }
+      
+      .results-container {
+        margin-top: 1rem;
+      }
+      
+      .results-container #results {
+        height: 50vh !important;
+      }
+      
+      /* Improve touch targets and spacing on mobile */
+      button, select, input[type="range"] {
+        touch-action: manipulation;
+      }
+      
+      /* Better slider styling for mobile */
+      input[type="range"] {
+        -webkit-appearance: none;
+        appearance: none;
+        background: transparent;
+        cursor: pointer;
+      }
+      
+      input[type="range"]::-webkit-slider-track {
+        background: #3f3f46;
+        height: 4px;
+        border-radius: 2px;
+      }
+      
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        background: currentColor;
+        height: 20px;
+        width: 20px;
+        border-radius: 50%;
+        border: 2px solid #18181b;
+      }
+      
+      input[type="range"]::-moz-range-track {
+        background: #3f3f46;
+        height: 4px;
+        border-radius: 2px;
+      }
+      
+      input[type="range"]::-moz-range-thumb {
+        background: currentColor;
+        height: 16px;
+        width: 16px;
+        border-radius: 50%;
+        border: 2px solid #18181b;
+        cursor: pointer;
+      }
+    }
+    
+    /* Desktop: Hide carousel indicators and restore grid */
+    @media (min-width: 769px) {
+      .carousel-indicators {
+        display: none !important;
+      }
+      
+      .discovery-carousel {
+        display: grid !important;
+        overflow: visible !important;
+      }
+      
+      .discovery-card {
+        width: auto !important;
+        flex-shrink: initial !important;
+      }
+      
+      .results-container #results {
+        height: auto !important;
+      }
+    }
+    
+    /* XL Desktop: Override carousel behavior for stacked layout */
+    @media (min-width: 1280px) {
+      .discovery-carousel {
+        display: block !important;
+        grid-template-columns: none !important;
+        overflow-x: visible !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      
+      .discovery-card {
+        min-width: auto !important;
+        scroll-snap-align: none !important;
+      }
+      
+      /* Override the 50vh height constraint on results for split layout */
+      #results {
+        height: auto !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 h-screen overflow-hidden flex flex-col">
+  <header class="border-b border-zinc-900 flex-shrink-0 bg-zinc-950">
+    <div class="w-full px-4 xl:px-8 py-3">
+      <!-- Mobile: Stack vertically, Desktop: Horizontal -->
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div class="flex items-center gap-2">
+          <div class="h-8 w-8 rounded-xl bg-emerald-500/90"></div>
+          <h1 class="text-lg font-semibold tracking-tight">Personal Discover</h1>
+        </div>
+        
+        <!-- Mobile: Auth status on separate row -->
+        <div class="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+          <span id="authStatus" class="text-sm text-zinc-400 sm:order-2">Not connected</span>
+          <div class="flex items-center gap-2 sm:order-1">
+            <button id="checkBtn" class="px-3 py-2 sm:py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sm min-h-[44px] sm:min-h-[auto]">Check API</button>
+            <button id="loginBtn" class="px-3 py-2 sm:py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm min-h-[44px] sm:min-h-[auto] flex-1 sm:flex-none">Connect Spotify</button>
+            <button id="logoutBtn" class="px-3 py-2 sm:py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sm min-h-[44px] sm:min-h-[auto] hidden">Sign out</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 w-full px-4 xl:px-8 py-4 space-y-4 overflow-hidden flex flex-col">
+    <!-- Mobile Carousel Indicators -->
+    <div class="carousel-indicators md:hidden flex justify-center gap-2 mb-4 flex-shrink-0"></div>
+    
+    <!-- Desktop: Split layout, Mobile/Tablet: Stacked layout -->
+    <div class="flex-1 space-y-4 xl:space-y-0 xl:flex xl:gap-6 xl:items-start overflow-hidden">
+      <!-- Controls Panel -->
+      <div class="xl:w-2/5 xl:h-full xl:overflow-y-auto xl:scrollbar-thin xl:scrollbar-thumb-zinc-600 xl:scrollbar-track-transparent">
+        <!-- Discovery Cards - Mobile: Carousel, Desktop: Grid, XL: Stacked -->
+        <section class="discovery-carousel md:grid md:grid-cols-2 lg:grid-cols-3 xl:block gap-4 md:gap-4 xl:space-y-4 flex md:flex-none xl:flex-none overflow-x-auto md:overflow-visible xl:overflow-visible -mx-4 md:mx-0 px-4 md:px-0" style="scroll-behavior: smooth;">
+      <!-- Taste DNA -->
+      <div class="discovery-card rounded-2xl border border-zinc-900 p-4 w-full md:w-auto xl:w-full flex-shrink-0 xl:flex-shrink xl:mb-0">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold">Your Taste DNA</h2>
+          <span id="dnaStatus" class="text-sm text-zinc-400">Not built</span>
+        </div>
+        <p class="text-sm text-zinc-400 mt-1">Build a fingerprint of your listening taste from audio features & genres.</p>
+        <div id="dnaFeatures" class="mt-3 space-y-2 hidden">
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="flex justify-between"><span>Danceability:</span><span id="dnaFeatureDanceability">-</span></div>
+            <div class="flex justify-between"><span>Energy:</span><span id="dnaFeatureEnergy">-</span></div>
+            <div class="flex justify-between"><span>Acousticness:</span><span id="dnaFeatureAcousticness">-</span></div>
+            <div class="flex justify-between"><span>Valence:</span><span id="dnaFeatureValence">-</span></div>
+            <div class="flex justify-between"><span>Tempo:</span><span id="dnaFeatureTempo">-</span></div>
+          </div>
+          <div id="dnaGenres" class="flex flex-wrap gap-1 mt-2"></div>
+        </div>
+        <div class="mt-3 flex items-center gap-3">
+          <button id="buildDNA" class="px-4 py-3 sm:px-3 sm:py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-sm min-h-[44px] sm:min-h-[auto]">Build DNA</button>
+          <button id="rebuildDNA" class="px-3 py-3 sm:px-2 sm:py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs min-h-[44px] sm:min-h-[auto] hidden">Force Rebuild</button>
+        </div>
+      </div>
+
+      <!-- Mood Discovery -->
+      <div class="discovery-card rounded-2xl border border-zinc-900 p-4 w-full md:w-auto xl:w-full flex-shrink-0 xl:flex-shrink xl:mb-0">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold">Mood Discovery</h2>
+          <span class="text-sm text-zinc-400">Instant mood radio</span>
+        </div>
+        <p class="text-sm text-zinc-400 mt-1">Discover tracks that fit your current emotional/musical mood.</p>
+        <div class="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <button id="moodEnergetic" class="px-3 py-3 sm:py-2 rounded-lg bg-red-600 hover:bg-red-500 text-sm min-h-[44px] sm:min-h-[auto]">⚡ Energetic</button>
+          <button id="moodChill" class="px-3 py-3 sm:py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm min-h-[44px] sm:min-h-[auto]">🌊 Chill</button>
+          <button id="moodMelancholic" class="px-3 py-3 sm:py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm min-h-[44px] sm:min-h-[auto]">🌧️ Melancholic</button>
+          <button id="moodEuphoric" class="px-3 py-3 sm:py-2 rounded-lg bg-yellow-600 hover:bg-yellow-500 text-sm min-h-[44px] sm:min-h-[auto]">🎉 Euphoric</button>
+          <button id="moodContemplative" class="px-3 py-3 sm:py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-sm min-h-[44px] sm:min-h-[auto]">🤔 Contemplative</button>
+          <button id="moodAggressive" class="px-3 py-3 sm:py-2 rounded-lg bg-gray-600 hover:bg-gray-500 text-sm min-h-[44px] sm:min-h-[auto]">🔥 Aggressive</button>
+          <button id="moodRomantic" class="px-3 py-3 sm:py-2 rounded-lg bg-pink-600 hover:bg-pink-500 text-sm min-h-[44px] sm:min-h-[auto]">💕 Romantic</button>
+          <button id="moodFocus" class="px-3 py-3 sm:py-2 rounded-lg bg-green-600 hover:bg-green-500 text-sm min-h-[44px] sm:min-h-[auto]">🎯 Focus</button>
+          <button id="moodNostalgic" class="px-3 py-3 sm:py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-sm min-h-[44px] sm:min-h-[auto]">📻 Nostalgic</button>
+          <button id="moodParty" class="px-3 py-3 sm:py-2 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 text-sm min-h-[44px] sm:min-h-[auto]">🎊 Party</button>
+          <button id="moodPeaceful" class="px-3 py-3 sm:py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm min-h-[44px] sm:min-h-[auto]">🕊️ Peaceful</button>
+          <button id="moodDramatic" class="px-3 py-3 sm:py-2 rounded-lg bg-slate-600 hover:bg-slate-500 text-sm min-h-[44px] sm:min-h-[auto]">🎭 Dramatic</button>
+        </div>
+        <div class="mt-3">
+          <span id="moodStats" class="text-xs text-zinc-400"></span>
+        </div>
+      </div>
+
+      <!-- Genre-Driven Discovery (Hidden Gems) -->
+      <div class="discovery-card rounded-2xl border border-zinc-900 p-4 w-full md:w-auto xl:w-full flex-shrink-0 xl:flex-shrink xl:mb-0">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold">Genre-Driven Discovery</h2>
+          <span id="popBiasLabel" class="text-sm text-zinc-400">Obscure</span>
+        </div>
+        <p class="text-sm text-zinc-400 mt-1">Uses your top genres → finds new/under-popular artists → picks top tracks.</p>
+
+        <!-- Feature Toolbar -->
+        <div class="mt-3 sticky top-0 z-10 -mx-4 px-4 py-2 border-y border-zinc-800 bg-zinc-950/80 backdrop-blur">
+          <div class="flex items-center gap-4">
+            <div class="flex-1">
+              <label class="flex items-center justify-between gap-3 text-xs text-zinc-400">
+                <span>Popularity bias</span>
+                <span id="popBiasValue" class="text-zinc-300">35</span>
+              </label>
+              <input id="popBias" type="range" min="0" max="100" value="35" class="w-full accent-emerald-500" />
+              <p class="text-[11px] text-zinc-500 mt-1">Lower = more obscure (favor low-popularity artists).</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-3 flex items-center gap-3">
+          <button id="runGenre" class="px-4 py-3 sm:px-3 sm:py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm min-h-[44px] sm:min-h-[auto]">Generate</button>
+          <span id="genreStats" class="text-xs text-zinc-400"></span>
+        </div>
+      </div>
+
+      <!-- Artist Graph Explorer -->
+      <div class="discovery-card rounded-2xl border border-zinc-900 p-4 w-full md:w-auto xl:w-full flex-shrink-0 xl:flex-shrink xl:mb-0">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold">Artist Graph Explorer</h2>
+          <span class="text-sm text-zinc-400">1-2 hops</span>
+        </div>
+        <p class="text-sm text-zinc-400 mt-1">Pick a top artist → explore related artists via genre overlap.</p>
+        <div class="mt-3">
+          <select id="seedArtist" class="w-full bg-zinc-900 border border-zinc-900 rounded-lg px-3 py-3 sm:py-2 text-sm min-h-[44px] sm:min-h-[auto]">
+            <option value="">Select an artist...</option>
+          </select>
+        </div>
+        <div class="mt-3 flex items-center gap-3">
+          <button id="runGraph" class="px-4 py-3 sm:px-3 sm:py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-sm min-h-[44px] sm:min-h-[auto]">Explore</button>
+          <span id="graphStats" class="text-xs text-zinc-400"></span>
+        </div>
+      </div>
+
+      <!-- Freshness Focus -->
+      <div class="discovery-card rounded-2xl border border-zinc-900 p-4 w-full md:w-auto xl:w-full flex-shrink-0 xl:flex-shrink xl:mb-0">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold">Freshness Focus</h2>
+          <span class="text-sm text-zinc-400">New releases</span>
+        </div>
+        <p class="text-sm text-zinc-400 mt-1">Find new releases from your top artists (last 30 days).</p>
+        <div class="mt-3">
+          <div class="flex items-center gap-3">
+            <input id="freshnessDays" type="range" min="7" max="90" value="30" class="flex-1 accent-emerald-500 h-8 sm:h-auto" />
+            <span id="freshnessDaysValue" class="text-sm w-8 text-right font-mono">30</span>
+            <span class="text-xs text-zinc-500">days</span>
+          </div>
+        </div>
+        <div class="mt-3 flex items-center gap-3">
+          <button id="runFreshness" class="px-4 py-3 sm:px-3 sm:py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-sm min-h-[44px] sm:min-h-[auto]">Scan</button>
+          <span id="freshnessStats" class="text-xs text-zinc-400"></span>
+        </div>
+      </div>
+
+      <!-- Time-Machine -->
+      <div class="discovery-card rounded-2xl border border-zinc-900 p-4 w-full md:w-auto xl:w-full flex-shrink-0 xl:flex-shrink xl:mb-0">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold">Time-Machine</h2>
+          <span class="text-sm text-zinc-400">Then → Now</span>
+        </div>
+        <p class="text-sm text-zinc-400 mt-1">Resurface old gems from your library and pair with modern analogs.</p>
+        <div class="mt-3">
+          <select id="yearSelect" class="w-full bg-zinc-900 border border-zinc-900 rounded-lg px-3 py-3 sm:py-2 text-sm min-h-[44px] sm:min-h-[auto]">
+            <option value="">Select a year...</option>
+          </select>
+        </div>
+        <div class="mt-3 flex items-center gap-3">
+          <button id="runTimeMachine" class="px-4 py-3 sm:px-3 sm:py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-sm min-h-[44px] sm:min-h-[auto]">Build Then → Now</button>
+          <span id="timeMachineStats" class="text-xs text-zinc-400"></span>
+        </div>
+      </div>
+
+      <!-- Gap Analysis (genre overlap) -->
+      <div class="discovery-card rounded-2xl border border-zinc-900 p-4 w-full md:w-auto xl:w-full flex-shrink-0 xl:flex-shrink xl:mb-0 lg:col-span-3 xl:col-span-1">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold">Gap Analysis (Genre Overlap)</h2>
+          <span class="text-sm text-zinc-400">"How did I miss these?"</span>
+        </div>
+        <p class="text-sm text-zinc-400 mt-1">Find artists that match many of your genres but aren't in your top artists.</p>
+        <div class="mt-3 flex items-center gap-3">
+          <button id="runGap" class="px-4 py-3 sm:px-3 sm:py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sm min-h-[44px] sm:min-h-[auto]">Scan</button>
+          <span id="gapStats" class="text-xs text-zinc-400"></span>
+        </div>
+        <div id="gapList" class="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2"></div>
+      </div>
+        </section>
+      </div>
+
+      <!-- Results Panel -->
+      <div class="xl:flex-1 xl:h-full xl:flex xl:flex-col">
+        <!-- Results -->
+        <section class="results-container rounded-2xl border border-zinc-900 overflow-hidden xl:flex-1 xl:flex xl:flex-col xl:min-h-0">
+      <!-- Sticky Results Toolbar -->
+      <div class="p-4 flex flex-col gap-4 sticky top-0 z-10 bg-zinc-950/90 backdrop-blur border-b border-zinc-800">
+        <div class="flex items-center justify-between">
+          <h3 class="font-semibold">Results</h3>
+          <span id="obscurityStats" class="text-xs text-zinc-400 hidden sm:block"></span>
+        </div>
+        
+        <!-- Mobile: Stack controls vertically -->
+        <div class="space-y-3 sm:space-y-0 sm:flex sm:items-center sm:gap-6">
+          <!-- Market selection -->
+          <div class="flex items-center gap-3">
+            <span class="text-zinc-400 text-sm">Market</span>
+            <select id="market" class="bg-zinc-900 border border-zinc-900 rounded-lg px-3 py-2 text-sm min-h-[44px] sm:min-h-[auto] sm:px-2 sm:py-1">
+              <option value="GB" selected>GB</option>
+              <option value="US">US</option>
+              <option value="DE">DE</option>
+              <option value="JP">JP</option>
+            </select>
+          </div>
+
+          <!-- Obscurity control -->
+          <div class="flex items-center gap-3 flex-1">
+            <label class="text-sm text-zinc-400 whitespace-nowrap">Obscurity</label>
+            <input id="obscuritySlider" type="range" min="0" max="100" value="0" class="flex-1 sm:w-32 accent-red-500 h-8 sm:h-auto" />
+            <span id="obscurityValue" class="w-8 text-right text-sm font-mono">0</span>
+          </div>
+          
+          <!-- DNA sort -->
+          <div class="flex items-center gap-2">
+            <label class="flex items-center gap-2 text-sm text-zinc-400">
+              <input id="sortByDNA" type="checkbox" class="accent-purple-500 w-4 h-4" disabled>
+              <span class="whitespace-nowrap">Sort by DNA</span>
+            </label>
+          </div>
+        </div>
+        
+        <!-- Mobile stats on separate row -->
+        <div class="sm:hidden">
+          <span id="obscurityStats" class="text-xs text-zinc-400"></span>
+        </div>
+      </div>
+
+      <div id="results" class="divide-y divide-zinc-900 overflow-y-auto xl:flex-1 xl:h-auto" style="height: 50vh; -webkit-overflow-scrolling: touch;"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+
+  <script src="./src/mood-discovery.js"></script>
+  <script type="module" src="./src/mobile.js"></script>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
