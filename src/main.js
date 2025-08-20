@@ -76,7 +76,8 @@ document.addEventListener("DOMContentLoaded", () => {
     runTimeMachine: "runTimeMachine",
     yearSelect: "yearSelect",
     obscuritySlider: "obscuritySlider",
-    obscurityValue: "obscurityValue"
+    obscurityValue: "obscurityValue",
+    mobileFiltersToggle: "mobileFiltersToggle"
   };
 
   const ui = {};
@@ -144,7 +145,8 @@ document.addEventListener("DOMContentLoaded", () => {
     moodPeaceful: { event: "click", handler: () => handleMoodDiscovery("peaceful") },
     moodDramatic: { event: "click", handler: () => handleMoodDiscovery("dramatic") },
     runTimeMachine: { event: "click", handler: handleRunTimeMachine },
-    obscuritySlider: { event: "input", handler: handleObscurityFilter }
+    obscuritySlider: { event: "input", handler: handleObscurityFilter },
+    mobileFiltersToggle: { event: "click", handler: handleMobileFiltersToggle }
   };
 
   for (const [elementKey, config] of Object.entries(UI_HANDLERS)) {
@@ -191,6 +193,26 @@ document.addEventListener("DOMContentLoaded", () => {
   // Make functions globally accessible
   window.updateAuthUI = updateAuthUI;
   window.updatePopLabel = updatePopLabel;
+  
+  // Mobile filters toggle functionality
+  function handleMobileFiltersToggle() {
+    const mobileControls = document.getElementById('mobileControls');
+    const toggleBtn = document.getElementById('mobileFiltersToggle');
+    
+    if (mobileControls.classList.contains('hidden')) {
+      mobileControls.classList.remove('hidden');
+      toggleBtn.textContent = 'Hide Filters';
+      toggleBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
+      toggleBtn.classList.remove('bg-zinc-800', 'hover:bg-zinc-700');
+    } else {
+      mobileControls.classList.add('hidden');
+      toggleBtn.textContent = 'Filters';
+      toggleBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-500');
+      toggleBtn.classList.add('bg-zinc-800', 'hover:bg-zinc-700');
+    }
+  }
+  
+  window.handleMobileFiltersToggle = handleMobileFiltersToggle;
 });
 
 // === AUTH (PKCE minimal) ===
@@ -329,9 +351,9 @@ async function getPaged(firstPage) {
 async function handleCheckAPI() {
   try {
     const me = await api("/me");
-    toast(`Hello ${me.display_name || me.id}`);
+    toast(`Hello ${me.display_name || me.id}`, 'success');
     const top = await api("/me/top/artists", { limit: 10, time_range: "medium_term" });
-    toast(`Top artists returned: ${(top.items || []).length}`);
+    toast(`Top artists returned: ${(top.items || []).length}`, 'info');
     // NOTE: /recommendations and related-artists are intentionally not called here (restricted for new apps).
   } catch (e) {
     toast(e.message);
@@ -461,7 +483,7 @@ async function handleRunTimeMachine() {
   try {
     const selectedYear = parseInt(yearSelect.value);
     if (!selectedYear) {
-      toast("Please select a year first");
+      toast("Please select a year first", 'warning');
       return;
     }
     
@@ -914,14 +936,20 @@ function renderTracksWithObscurity(tracksWithObscurity) {
   
   tracksWithObscurity.forEach((track, i) => {
     const row = document.createElement("div");
-    row.className = "p-3 hover:bg-zinc-900/50 grid grid-cols-[auto_auto_1fr_auto] gap-3 items-center";
+    row.className = "p-4 md:p-3 hover:bg-zinc-900/50 md:grid md:grid-cols-[auto_auto_1fr_auto] md:gap-3 md:items-center space-y-3 md:space-y-0";
 
+    // Track number (hidden on mobile)
     const idx = document.createElement("div");
-    idx.className = "text-zinc-500 text-sm w-6 text-right";
+    idx.className = "hidden md:block text-zinc-500 text-sm w-6 text-right";
     idx.textContent = String(i + 1);
 
+    // Mobile: Create main content container
+    const mobileContent = document.createElement("div");
+    mobileContent.className = "flex items-start gap-3 md:contents";
+
+    // Artwork (larger on mobile)
     const artwork = document.createElement("div");
-    artwork.className = "w-12 h-12 rounded-lg bg-zinc-800 overflow-hidden flex-shrink-0";
+    artwork.className = "w-16 h-16 md:w-12 md:h-12 rounded-lg bg-zinc-800 overflow-hidden flex-shrink-0";
     const albumImage = track.album?.images?.[2] || track.album?.images?.[1] || track.album?.images?.[0];
     if (albumImage) {
       artwork.innerHTML = `<img src="${albumImage.url}" alt="Album art" class="w-full h-full object-cover" loading="lazy">`;
@@ -929,41 +957,50 @@ function renderTracksWithObscurity(tracksWithObscurity) {
       artwork.innerHTML = `<div class="w-full h-full bg-zinc-700 flex items-center justify-center text-zinc-500 text-xs">♪</div>`;
     }
 
+    // Track info container
     const main = document.createElement("div");
+    main.className = "flex-1 min-w-0";
     const artistNames = (track.artists || []).map(a => a.name).join(", ");
     
     // Create obscurity badge with tooltip
     const obscurityBadge = track.hasFollowerData ? 
-      `<span class="px-1.5 py-0.5 rounded bg-red-900/70 text-red-200" title="Obscurity score based on popularity + follower count">obscurity ${track.obscurityScore}</span>` :
-      `<span class="px-1.5 py-0.5 rounded bg-red-900/50 text-red-300" title="Obscurity score (pop-only, follower data unavailable)">obscurity ${track.obscurityScore}</span>`;
+      `<span class="px-1.5 py-0.5 rounded bg-red-900/70 text-red-200 text-xs" title="Obscurity score based on popularity + follower count">obscurity ${track.obscurityScore}</span>` :
+      `<span class="px-1.5 py-0.5 rounded bg-red-900/50 text-red-300 text-xs" title="Obscurity score (pop-only, follower data unavailable)">obscurity ${track.obscurityScore}</span>`;
     
+    // Mobile-optimized layout with better text hierarchy
     main.innerHTML = `
-      <div class="font-medium truncate">${escapeHtml(track.name)} — <span class="text-zinc-400">${escapeHtml(artistNames)}</span></div>
-      <div class="text-xs text-zinc-500 mt-0.5 flex items-center gap-2">
-        <span class="px-1.5 py-0.5 rounded bg-zinc-800/70">pop ${track.popularity ?? 0}</span>
+      <div class="font-medium text-base md:text-sm leading-tight">${escapeHtml(track.name)}</div>
+      <div class="text-zinc-400 text-sm md:text-xs mt-0.5 leading-tight">${escapeHtml(artistNames)}</div>
+      <div class="flex flex-wrap gap-1 mt-2 md:mt-0.5">
+        <span class="px-1.5 py-0.5 rounded bg-zinc-800/70 text-xs">pop ${track.popularity ?? 0}</span>
         ${obscurityBadge}
-        ${track.album?.release_date ? `<span class="px-1.5 py-0.5 rounded bg-zinc-800/70">${track.album.release_date}</span>` : ""}
-        ${track.album?.name ? `<span class="px-1.5 py-0.5 rounded bg-zinc-800/70 truncate max-w-32">${escapeHtml(track.album.name)}</span>` : ""}
+        <span class="md:hidden px-1.5 py-0.5 rounded bg-zinc-800/70 text-xs">#${i + 1}</span>
+        ${track.album?.release_date ? `<span class="hidden md:inline px-1.5 py-0.5 rounded bg-zinc-800/70 text-xs">${track.album.release_date}</span>` : ""}
+        ${track.album?.name ? `<span class="hidden lg:inline px-1.5 py-0.5 rounded bg-zinc-800/70 truncate max-w-32 text-xs">${escapeHtml(track.album.name)}</span>` : ""}
       </div>
     `;
 
+    // Action buttons (full width on mobile)
     const actions = document.createElement("div");
-    actions.className = "flex items-center gap-2";
+    actions.className = "flex gap-3 w-full md:w-auto md:gap-2 md:contents";
+    
     const previewBtn = document.createElement("button");
-    previewBtn.className = "px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sm disabled:opacity-50";
+    previewBtn.className = "flex-1 md:flex-none py-3 md:py-1 px-4 md:px-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-sm font-medium disabled:opacity-50 touch-manipulation transition-colors";
     previewBtn.textContent = track.preview_url ? "Preview" : "No preview";
     previewBtn.disabled = !track.preview_url;
     previewBtn.addEventListener("click", () => playPreview(track.preview_url, previewBtn));
 
     const openBtn = document.createElement("a");
-    openBtn.className = "px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm";
+    openBtn.className = "flex-1 md:flex-none py-3 md:py-1 px-4 md:px-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-sm font-medium text-center touch-manipulation transition-colors";
     openBtn.href = track.external_urls?.spotify || "#";
     openBtn.target = "_blank";
     openBtn.rel = "noopener";
     openBtn.textContent = "Open";
 
+    // Assemble the layout
+    mobileContent.append(artwork, main);
     actions.append(previewBtn, openBtn);
-    row.append(idx, artwork, main, actions);
+    row.append(idx, mobileContent, actions);
     el.appendChild(row);
   });
 
@@ -1151,7 +1188,7 @@ async function handleRunGraphExplorer() {
   try {
     const seedId = seedSelect.value;
     if (!seedId) {
-      toast("Please select an artist first");
+      toast("Please select an artist first", 'warning');
       return;
     }
 
@@ -1339,7 +1376,7 @@ async function handleBuildTasteDNA() {
       featuresEl.classList.remove("hidden");
       document.getElementById("sortByDNA").disabled = false;
       document.getElementById("rebuildDNA").classList.remove("hidden");
-      toast("Using cached Taste DNA (rebuild in 1 hour to refresh)");
+      toast("Using cached Taste DNA (rebuild in 1 hour to refresh)", 'info');
       return;
     }
     
@@ -1408,7 +1445,7 @@ async function handleBuildTasteDNA() {
     document.getElementById("sortByDNA").disabled = false;
     document.getElementById("rebuildDNA").classList.remove("hidden");
     
-    toast("Taste DNA built successfully!");
+    toast("Taste DNA built successfully!", 'success');
     
   } catch (e) {
     toast(e.message);
@@ -1462,7 +1499,7 @@ function handleDNASortToggle() {
     app.lastResults = [...app.originalResults];
     // Note: Keep cached obscurity scores since we're using the same tracks, just reordered
     renderTracks(app.lastResults);
-    toast("Restored original order");
+    toast("Restored original order", 'info');
   }
 }
 
@@ -1498,10 +1535,10 @@ async function sortResultsByDNASimilarity() {
     // Show similarity stats
     const avgSimilarity = scoredTracks.reduce((sum, t) => sum + t.score, 0) / scoredTracks.length;
     const maxSimilarity = Math.max(...scoredTracks.map(t => t.score));
-    toast(`Sorted by taste similarity (avg: ${(avgSimilarity * 100).toFixed(0)}%, max: ${(maxSimilarity * 100).toFixed(0)}%)`);
+    toast(`Sorted by taste similarity (avg: ${(avgSimilarity * 100).toFixed(0)}%, max: ${(maxSimilarity * 100).toFixed(0)}%)`, 'success');
     
   } catch (e) {
-    toast("Error sorting by taste: " + e.message);
+    toast("Error sorting by taste: " + e.message, 'error');
     console.error(e);
     renderTracks(app.lastResults); // fallback to original order
   }
@@ -1623,49 +1660,65 @@ function renderTracksOriginal(tracks) {
 
   tracks.forEach((t, i) => {
     const row = document.createElement("div");
-    row.className = "p-3 hover:bg-zinc-900/50 grid grid-cols-[auto_auto_1fr_auto] gap-3 items-center";
+    row.className = "p-4 md:p-3 hover:bg-zinc-900/50 md:grid md:grid-cols-[auto_auto_1fr_auto] md:gap-3 md:items-center space-y-3 md:space-y-0";
 
+    // Track number (hidden on mobile)
     const idx = document.createElement("div");
-    idx.className = "text-zinc-500 text-sm w-6 text-right";
+    idx.className = "hidden md:block text-zinc-500 text-sm w-6 text-right";
     idx.textContent = String(i + 1);
 
+    // Mobile: Create main content container
+    const mobileContent = document.createElement("div");
+    mobileContent.className = "flex items-start gap-3 md:contents";
+
+    // Artwork (larger on mobile)
     const artwork = document.createElement("div");
-    artwork.className = "w-12 h-12 rounded-lg bg-zinc-800 overflow-hidden flex-shrink-0";
-    const albumImage = t.album?.images?.[2] || t.album?.images?.[1] || t.album?.images?.[0]; // get smallest available image
+    artwork.className = "w-16 h-16 md:w-12 md:h-12 rounded-lg bg-zinc-800 overflow-hidden flex-shrink-0";
+    const albumImage = t.album?.images?.[2] || t.album?.images?.[1] || t.album?.images?.[0];
     if (albumImage) {
       artwork.innerHTML = `<img src="${albumImage.url}" alt="Album art" class="w-full h-full object-cover" loading="lazy">`;
     } else {
       artwork.innerHTML = `<div class="w-full h-full bg-zinc-700 flex items-center justify-center text-zinc-500 text-xs">♪</div>`;
     }
 
+    // Track info container
     const main = document.createElement("div");
+    main.className = "flex-1 min-w-0";
     const artistNames = (t.artists || []).map(a => a.name).join(", ");
+    
+    // Mobile-optimized layout with better text hierarchy
     main.innerHTML = `
-      <div class="font-medium truncate">${escapeHtml(t.name)} — <span class="text-zinc-400">${escapeHtml(artistNames)}</span></div>
-      <div class="text-xs text-zinc-500 mt-0.5 flex items-center gap-2">
-        <span class="px-1.5 py-0.5 rounded bg-zinc-800/70">pop ${t.popularity ?? 0}</span>
-        ${t.album?.release_date ? `<span class="px-1.5 py-0.5 rounded bg-zinc-800/70">${t.album.release_date}</span>` : ""}
-        ${t.album?.name ? `<span class="px-1.5 py-0.5 rounded bg-zinc-800/70 truncate max-w-32">${escapeHtml(t.album.name)}</span>` : ""}
+      <div class="font-medium text-base md:text-sm leading-tight">${escapeHtml(t.name)}</div>
+      <div class="text-zinc-400 text-sm md:text-xs mt-0.5 leading-tight">${escapeHtml(artistNames)}</div>
+      <div class="flex flex-wrap gap-1 mt-2 md:mt-0.5">
+        <span class="px-1.5 py-0.5 rounded bg-zinc-800/70 text-xs">pop ${t.popularity ?? 0}</span>
+        <span class="md:hidden px-1.5 py-0.5 rounded bg-zinc-800/70 text-xs">#${i + 1}</span>
+        ${t.album?.release_date ? `<span class="hidden md:inline px-1.5 py-0.5 rounded bg-zinc-800/70 text-xs">${t.album.release_date}</span>` : ""}
+        ${t.album?.name ? `<span class="hidden lg:inline px-1.5 py-0.5 rounded bg-zinc-800/70 truncate max-w-32 text-xs">${escapeHtml(t.album.name)}</span>` : ""}
       </div>
     `;
 
+    // Action buttons (full width on mobile)
     const actions = document.createElement("div");
-    actions.className = "flex items-center gap-2";
+    actions.className = "flex gap-3 w-full md:w-auto md:gap-2 md:contents";
+    
     const previewBtn = document.createElement("button");
-    previewBtn.className = "px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sm disabled:opacity-50";
+    previewBtn.className = "flex-1 md:flex-none py-3 md:py-1 px-4 md:px-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-900 text-sm font-medium disabled:opacity-50 touch-manipulation transition-colors";
     previewBtn.textContent = t.preview_url ? "Preview" : "No preview";
     previewBtn.disabled = !t.preview_url;
     previewBtn.addEventListener("click", () => playPreview(t.preview_url, previewBtn));
 
     const openBtn = document.createElement("a");
-    openBtn.className = "px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-sm";
+    openBtn.className = "flex-1 md:flex-none py-3 md:py-1 px-4 md:px-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-sm font-medium text-center touch-manipulation transition-colors";
     openBtn.href = t.external_urls?.spotify || "#";
     openBtn.target = "_blank";
     openBtn.rel = "noopener";
     openBtn.textContent = "Open";
 
+    // Assemble the layout
+    mobileContent.append(artwork, main);
     actions.append(previewBtn, openBtn);
-    row.append(idx, artwork, main, actions);
+    row.append(idx, mobileContent, actions);
     el.appendChild(row);
   });
 
@@ -1678,15 +1731,62 @@ function renderTracksOriginal(tracks) {
 // === UNIFIED STATUS/SKELETON/TOAST API ===
 const Status = {
   skeleton(text) {
-    return `<div class="p-4 text-sm text-zinc-400">${escapeHtml(text)}</div>`;
+    return `<div class="p-6 text-sm text-gray-500 skeleton rounded-lg">${escapeHtml(text)}</div>`;
   },
 
-  toast(msg, duration = 2600) {
-    const el = document.createElement("div");
-    el.className = "fixed bottom-4 left-1/2 -translate-x-1/2 bg-zinc-900 border border-zinc-800 text-sm px-3 py-2 rounded-lg shadow";
-    el.textContent = msg;
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), duration);
+  toast(msg, type = 'info', duration = 3000) {
+    // Create notification container if it doesn't exist
+    let container = document.getElementById('notification-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'notification-container';
+      container.className = 'fixed top-6 right-6 z-50 flex flex-col gap-3 max-w-sm';
+      document.body.appendChild(container);
+    }
+
+    const el = document.createElement('div');
+    const iconMap = {
+      success: { icon: '✓', bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-800', accent: 'border-l-green-500' },
+      error: { icon: '✕', bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-800', accent: 'border-l-red-500' },
+      warning: { icon: '⚠', bg: 'bg-yellow-50', border: 'border-yellow-200', text: 'text-yellow-800', accent: 'border-l-yellow-500' },
+      info: { icon: 'ℹ', bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-800', accent: 'border-l-blue-500' }
+    };
+    
+    const config = iconMap[type] || iconMap.info;
+    
+    el.className = `${config.bg} ${config.border} ${config.text} border ${config.accent} border-l-4 rounded-lg p-4 shadow-lg backdrop-blur-sm transform transition-all duration-300 translate-x-full opacity-0`;
+    
+    el.innerHTML = `
+      <div class="flex items-start gap-3">
+        <div class="flex-shrink-0 w-5 h-5 rounded-full bg-current bg-opacity-20 flex items-center justify-center text-xs font-bold">
+          ${config.icon}
+        </div>
+        <div class="flex-1 text-sm font-medium leading-relaxed">${escapeHtml(msg)}</div>
+        <button class="flex-shrink-0 text-current opacity-50 hover:opacity-100 transition-opacity duration-200" onclick="this.parentElement.parentElement.remove()">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+    `;
+    
+    container.appendChild(el);
+    
+    // Animate in
+    requestAnimationFrame(() => {
+      el.classList.remove('translate-x-full', 'opacity-0');
+      el.classList.add('translate-x-0', 'opacity-100');
+    });
+    
+    // Auto-remove
+    setTimeout(() => {
+      el.classList.add('translate-x-full', 'opacity-0');
+      setTimeout(() => {
+        if (el.parentElement) el.remove();
+        // Clean up container if empty
+        if (container.children.length === 0) container.remove();
+      }, 300);
+    }, duration);
   },
 
   updateElement(elementOrId, content, isHTML = false) {
@@ -1779,7 +1879,7 @@ function playPreview(url, btn) {
   try { a.pause(); } catch {}
   a.src = url;
   a.currentTime = 0;
-  a.play().catch(() => toast("Autoplay blocked—tap Preview again."));
+  a.play().catch(() => toast("Autoplay blocked—tap Preview again.", 'warning'));
   btn.textContent = "Playing…";
   a.onended = () => { btn.textContent = "Preview"; };
 }
@@ -1899,8 +1999,8 @@ function medianOf(nums) {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-function toast(msg, duration) {
-  return Status.toast(msg, duration);
+function toast(msg, type = 'info', duration = 3000) {
+  return Status.toast(msg, type, duration);
 }
 function scrollIntoViewSmooth(node) {
   if (!node) return;

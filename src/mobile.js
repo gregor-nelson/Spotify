@@ -31,17 +31,17 @@ export class MobileCarousel {
     const cards = this.carousel.querySelectorAll('.discovery-card');
     this.totalCards = cards.length;
     
-    // Set up scroll snap behavior
-    this.carousel.style.scrollSnapType = 'x mandatory';
-    this.carousel.style.overflowX = 'auto';
-    this.carousel.style.display = 'flex';
-    
-    cards.forEach((card, index) => {
-      card.style.scrollSnapAlign = 'start';
-      card.style.flexShrink = '0';
-      card.style.width = '100%';
-      card.dataset.cardIndex = index;
-    });
+    // Only apply mobile carousel behavior on mobile devices
+    if (window.innerWidth <= 768) {
+      cards.forEach((card, index) => {
+        card.dataset.cardIndex = index;
+        
+        // Add active indicator styling for first card
+        if (index === 0) {
+          card.classList.add('ring-2', 'ring-emerald-500', 'ring-opacity-50');
+        }
+      });
+    }
     
     // Listen for scroll events to update indicators
     this.carousel.addEventListener('scroll', this.handleScroll.bind(this));
@@ -54,7 +54,9 @@ export class MobileCarousel {
     
     for (let i = 0; i < this.totalCards; i++) {
       const dot = document.createElement('div');
-      dot.className = `indicator-dot ${i === 0 ? 'active' : ''}`;
+      dot.className = `w-2 h-2 rounded-full cursor-pointer transition-all duration-200 touch-manipulation ${
+        i === 0 ? 'bg-emerald-500 scale-110' : 'bg-zinc-600 hover:bg-zinc-400'
+      }`;
       dot.dataset.index = i;
       dot.addEventListener('click', () => this.scrollToCard(i));
       this.indicators.appendChild(dot);
@@ -64,12 +66,19 @@ export class MobileCarousel {
   setupTouchEvents() {
     let startX = 0;
     let startY = 0;
+    let startTime = 0;
     let isDragging = false;
+    let isScrolling = false;
     
     this.carousel.addEventListener('touchstart', (e) => {
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
+      startTime = Date.now();
       isDragging = true;
+      isScrolling = false;
+      
+      // Store the starting scroll position
+      this.startScrollLeft = this.carousel.scrollLeft;
     }, { passive: true });
     
     this.carousel.addEventListener('touchmove', (e) => {
@@ -80,15 +89,55 @@ export class MobileCarousel {
       const deltaX = Math.abs(startX - currentX);
       const deltaY = Math.abs(startY - currentY);
       
-      // Only prevent default if horizontal swipe is dominant AND event is cancelable
-      if (deltaX > deltaY && deltaX > 10 && e.cancelable) {
-        e.preventDefault();
+      // Determine scroll direction on first significant movement
+      if (!isScrolling && (deltaX > 5 || deltaY > 5)) {
+        isScrolling = true;
+        
+        // If horizontal movement is dominant, prevent vertical scroll
+        if (deltaX > deltaY && deltaX > 10) {
+          if (e.cancelable) {
+            e.preventDefault();
+          }
+        }
       }
-    }, { passive: false }); // Need passive: false to call preventDefault
+    }, { passive: false });
     
-    this.carousel.addEventListener('touchend', () => {
+    this.carousel.addEventListener('touchend', (e) => {
+      if (!isDragging) return;
+      
+      const endTime = Date.now();
+      const deltaTime = endTime - startTime;
+      const deltaX = startX - e.changedTouches[0].clientX;
+      
+      // Detect swipe gestures (fast movement)
+      if (deltaTime < 300 && Math.abs(deltaX) > 50) {
+        const swipeThreshold = this.carousel.clientWidth * 0.3; // 30% of card width
+        
+        if (deltaX > swipeThreshold) {
+          // Swipe left - next card
+          this.nextCard();
+        } else if (deltaX < -swipeThreshold) {
+          // Swipe right - previous card
+          this.prevCard();
+        }
+      } else {
+        // Slow drag - snap to nearest card
+        this.snapToNearestCard();
+      }
+      
       isDragging = false;
+      isScrolling = false;
     }, { passive: true });
+  }
+  
+  snapToNearestCard() {
+    if (!this.carousel || window.innerWidth > 768) return;
+    
+    const cardWidth = this.carousel.clientWidth;
+    const scrollLeft = this.carousel.scrollLeft;
+    const nearestIndex = Math.round(scrollLeft / cardWidth);
+    
+    this.scrollToCard(nearestIndex);
   }
 
   setupResizeHandler() {
@@ -115,9 +164,13 @@ export class MobileCarousel {
   updateIndicators() {
     if (!this.indicators) return;
     
-    const dots = this.indicators.querySelectorAll('.indicator-dot');
-    dots.forEach((dot, index) => {
-      dot.classList.toggle('active', index === this.currentCardIndex);
+    const dots = this.indicators.children;
+    Array.from(dots).forEach((dot, index) => {
+      if (index === this.currentCardIndex) {
+        dot.className = 'w-2 h-2 rounded-full cursor-pointer transition-all duration-200 touch-manipulation bg-emerald-500 scale-110';
+      } else {
+        dot.className = 'w-2 h-2 rounded-full cursor-pointer transition-all duration-200 touch-manipulation bg-zinc-600 hover:bg-zinc-400';
+      }
     });
   }
 
@@ -140,10 +193,14 @@ export class MobileCarousel {
     });
     document.dispatchEvent(event);
     
-    // Update active card styling
+    // Update active card styling using Tailwind classes
     const cards = this.carousel.querySelectorAll('.discovery-card');
     cards.forEach((card, i) => {
-      card.classList.toggle('active', i === index);
+      if (i === index) {
+        card.classList.add('ring-2', 'ring-emerald-500', 'ring-opacity-50');
+      } else {
+        card.classList.remove('ring-2', 'ring-emerald-500', 'ring-opacity-50');
+      }
     });
   }
 
@@ -187,31 +244,56 @@ export class MobileResults {
   }
 
   setupResultsContainer() {
-    // Set fixed height and scrollable behavior
-    this.resultsContainer.style.height = '50vh';
-    this.resultsContainer.style.overflowY = 'auto';
-    this.resultsContainer.style.webkitOverflowScrolling = 'touch';
+    const resultsEl = document.getElementById('results');
+    if (!resultsEl) return;
     
-    // Add momentum scrolling for iOS
-    this.resultsContainer.style.webkitOverflowScrolling = 'touch';
+    // Apply mobile-specific classes for better scrolling
+    if (window.innerWidth <= 768) {
+      resultsEl.classList.add('mobile-results-height');
+      
+      // Enhance touch scrolling
+      resultsEl.style.webkitOverflowScrolling = 'touch';
+      resultsEl.style.scrollBehavior = 'smooth';
+      
+      // Add scroll momentum for better UX
+      resultsEl.addEventListener('touchstart', this.handleTouchStart.bind(this), { passive: true });
+      resultsEl.addEventListener('scroll', this.handleResultsScroll.bind(this), { passive: true });
+    }
+  }
+  
+  handleTouchStart(e) {
+    // Store initial touch for momentum calculation
+    this.touchStartY = e.touches[0].clientY;
+    this.scrollStartTime = Date.now();
+  }
+  
+  handleResultsScroll(e) {
+    // Optional: Add scroll position persistence
+    this.lastScrollPosition = e.target.scrollTop;
   }
 
   scrollToTop() {
-    if (this.resultsContainer) {
-      this.resultsContainer.scrollTo({
+    const resultsEl = document.getElementById('results');
+    if (resultsEl) {
+      resultsEl.scrollTo({
         top: 0,
         behavior: 'smooth'
       });
     }
   }
+  
+  restoreScrollPosition() {
+    const resultsEl = document.getElementById('results');
+    if (resultsEl && this.lastScrollPosition) {
+      resultsEl.scrollTop = this.lastScrollPosition;
+    }
+  }
 
   updateResults(html) {
-    if (this.resultsContainer) {
-      const resultsContent = this.resultsContainer.querySelector('#results');
-      if (resultsContent) {
-        resultsContent.innerHTML = html;
-        this.scrollToTop();
-      }
+    const resultsEl = document.getElementById('results');
+    if (resultsEl) {
+      resultsEl.innerHTML = html;
+      this.scrollToTop();
     }
   }
 }
